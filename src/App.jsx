@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Home, Search, ShoppingCart, ClipboardList, User, Plus, Minus,
   Heart, Star, ChevronLeft, ChevronRight, Check, MapPin, CreditCard,
   Sparkles, Filter, X, Package, Truck, TrendingUp, Users, BarChart3,
   Edit3, Trash2, AlertTriangle, Tag, LayoutGrid, Droplet
 } from "lucide-react";
+import { supabase } from "./supabaseClient";
 
 /* ---------------------------------------------------------
    ULTRA CLEAN — Home Care e-commerce app prototype
@@ -931,6 +932,66 @@ function StatCard({ label, value, icon: Icon, tone }) {
 
 export default function UltraCleanApp() {
   const [products, setProducts] = useState(seedProducts);
+
+  useEffect(() => {
+    async function loadLiveProducts() {
+      try {
+        const [{ data: categories, error: catErr }, { data: rows, error: prodErr }, { data: fragranceRows, error: fragErr }] =
+          await Promise.all([
+            supabase.from("categories").select("id, name"),
+            supabase.from("products").select("id, name, category_id, price, tag, description"),
+            supabase.from("product_fragrances").select("product_id, name"),
+          ]);
+
+        if (catErr) throw catErr;
+        if (prodErr) throw prodErr;
+        if (fragErr) throw fragErr;
+
+        // Map DB category names ("Air Care") to the slug the UI uses ("air")
+        const nameToSlug = {};
+        CATS.forEach((c) => { nameToSlug[c.name] = c.id; });
+        const categoryIdToSlug = {};
+        (categories || []).forEach((c) => {
+          categoryIdToSlug[c.id] = nameToSlug[c.name] || "surface";
+        });
+
+        // Group fragrance rows by product
+        const fragrancesByProduct = {};
+        (fragranceRows || []).forEach((f) => {
+          if (!fragrancesByProduct[f.product_id]) fragrancesByProduct[f.product_id] = [];
+          fragrancesByProduct[f.product_id].push(f.name);
+        });
+
+        const liveProducts = (rows || []).map((r) => ({
+          id: String(r.id),
+          cat: categoryIdToSlug[r.category_id] || "surface",
+          name: r.name,
+          tag: r.tag || "",
+          price: r.price,
+          // Not yet columns in the DB — safe defaults so the UI doesn't break.
+          // Add these columns in Supabase later to make them live too.
+          stock: 50,
+          rating: 4.5,
+          reviews: 0,
+          benefits: [],
+          instructions: "",
+          hasFragrance: (fragrancesByProduct[r.id] || []).length > 0,
+          desc: r.description || "",
+        }));
+
+        if (liveProducts.length > 0) {
+          setProducts(liveProducts);
+        }
+      } catch (err) {
+        // If anything goes wrong (e.g. RLS not configured yet), keep showing
+        // the sample data instead of breaking the live app.
+        console.error("Could not load live products, showing sample data:", err);
+      }
+    }
+
+    loadLiveProducts();
+  }, []);
+
   const [screen, setScreenRaw] = useState("home");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [cart, setCart] = useState([]);
