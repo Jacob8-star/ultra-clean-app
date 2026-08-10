@@ -939,7 +939,7 @@ export default function UltraCleanApp() {
         const [{ data: categories, error: catErr }, { data: rows, error: prodErr }, { data: fragranceRows, error: fragErr }] =
           await Promise.all([
             supabase.from("categories").select("id, name"),
-            supabase.from("products").select("id, name, category_id, price, tag, description"),
+            supabase.from("product").select("id, name, category_id, price, tag, description"),
             supabase.from("product_fragrances").select("product_id, name"),
           ]);
 
