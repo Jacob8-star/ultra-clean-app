@@ -736,15 +736,104 @@ function ScreenTrack({ order, setScreen }) {
   );
 }
 
-function ScreenAccount({ favorites, products, setScreen, onOpenProduct, toggleFav, setAdminMode }) {
+function ScreenAuth() {
+  const [mode, setMode] = useState("signin"); // "signin" | "signup"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const inputStyle = {
+    width: "100%", padding: "12px 14px", borderRadius: 10, border: `1.5px solid ${BRAND.line}`,
+    fontSize: 13.5, color: BRAND.ink, outline: "none", boxSizing: "border-box", marginBottom: 10
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    if (!email || !password) {
+      setError("Please enter both email and password.");
+      return;
+    }
+    setLoading(true);
+    try {
+      if (mode === "signin") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        setNotice("Account created! Check your email to confirm, then sign in.");
+      }
+    } catch (err) {
+      setError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: 20 }}>
+      <div style={{ textAlign: "center", marginBottom: 18 }}>
+        <Logo size={30} dark />
+        <div style={{ fontWeight: 800, fontSize: 16, color: BRAND.ink, marginTop: 14 }}>
+          {mode === "signin" ? "Welcome back" : "Create your account"}
+        </div>
+        <div style={{ fontSize: 12.5, color: BRAND.sub, marginTop: 4 }}>
+          {mode === "signin" ? "Sign in to view your orders and favorites" : "Sign up to start shopping with Ultra Clean"}
+        </div>
+      </div>
+
+      <form onSubmit={submit}>
+        <input type="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} autoCapitalize="none" />
+        <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
+
+        {error && <div style={{ color: BRAND.danger, fontSize: 12, marginBottom: 10, fontWeight: 600 }}>{error}</div>}
+        {notice && <div style={{ color: BRAND.green, fontSize: 12, marginBottom: 10, fontWeight: 600 }}>{notice}</div>}
+
+        <PrimaryButton style={{ width: "100%" }} disabled={loading}>
+          {loading ? "Please wait…" : mode === "signin" ? "Sign In" : "Sign Up"}
+        </PrimaryButton>
+      </form>
+
+      <div style={{ textAlign: "center", marginTop: 16, fontSize: 12.5, color: BRAND.sub }}>
+        {mode === "signin" ? (
+          <>Don't have an account?{" "}
+            <span onClick={() => { setMode("signup"); setError(""); setNotice(""); }} style={{ color: BRAND.green, fontWeight: 700, cursor: "pointer" }}>Sign up</span>
+          </>
+        ) : (
+          <>Already have an account?{" "}
+            <span onClick={() => { setMode("signin"); setError(""); setNotice(""); }} style={{ color: BRAND.green, fontWeight: 700, cursor: "pointer" }}>Sign in</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ScreenAccount({ favorites, products, setScreen, onOpenProduct, toggleFav, setAdminMode, session }) {
   const favProducts = products.filter(p => favorites.includes(p.id));
+
+  if (!session) {
+    return <ScreenAuth />;
+  }
+
+  const email = session.user.email;
+  const initial = email ? email[0].toUpperCase() : "?";
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
   return (
     <div>
       <div style={{ background: `linear-gradient(155deg, ${BRAND.green}, ${BRAND.greenDark})`, padding: "18px 16px 22px", display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ width: 52, height: 52, borderRadius: "50%", background: BRAND.yellow, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 18, color: BRAND.greenDark }}>A</div>
+        <div style={{ width: 52, height: 52, borderRadius: "50%", background: BRAND.yellow, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 18, color: BRAND.greenDark }}>{initial}</div>
         <div>
-          <div style={{ color: BRAND.white, fontWeight: 800, fontSize: 15 }}>Ada Okafor</div>
-          <div style={{ color: "rgba(255,255,255,0.75)", fontSize: 11.5 }}>ada.okafor@email.com</div>
+          <div style={{ color: BRAND.white, fontWeight: 800, fontSize: 15 }}>My Account</div>
+          <div style={{ color: "rgba(255,255,255,0.75)", fontSize: 11.5 }}>{email}</div>
         </div>
       </div>
 
@@ -771,6 +860,12 @@ function ScreenAccount({ favorites, products, setScreen, onOpenProduct, toggleFa
         }}>
           <span style={{ fontSize: 13, fontWeight: 800, color: BRAND.green }}>Admin Dashboard</span>
           <ChevronRight size={15} color={BRAND.green} />
+        </button>
+        <button onClick={handleSignOut} style={{
+          display: "flex", justifyContent: "center", alignItems: "center", background: "#FCEAE8",
+          border: "none", borderRadius: 12, padding: "13px 14px", cursor: "pointer", marginTop: 10
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: BRAND.danger }}>Sign Out</span>
         </button>
       </div>
     </div>
@@ -992,6 +1087,20 @@ export default function UltraCleanApp() {
     loadLiveProducts();
   }, []);
 
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
   const [screen, setScreenRaw] = useState("home");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [cart, setCart] = useState([]);
@@ -1090,7 +1199,7 @@ export default function UltraCleanApp() {
           <ScreenTrack order={trackedOrder} setScreen={setScreen} />
         )}
         {screen === "account" && (
-          <ScreenAccount favorites={favorites} products={products} setScreen={setScreen} onOpenProduct={openProduct} toggleFav={toggleFav} setAdminMode={setAdminMode} />
+          <ScreenAccount favorites={favorites} products={products} setScreen={setScreen} onOpenProduct={openProduct} toggleFav={toggleFav} setAdminMode={setAdminMode} session={session} />
         )}
       </div>
 
