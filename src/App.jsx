@@ -585,11 +585,46 @@ function Row({ label, value, bold, valueColor }) {
   );
 }
 
-function ScreenCheckout({ total, onPlaceOrder, onBack }) {
+function ScreenCheckout({ total, onPlaceOrder, onBack, userEmail }) {
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("Lagos");
   const [payment, setPayment] = useState("card");
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState("");
   const canPlace = address.trim().length > 3;
+
+  const handlePlaceOrder = () => {
+    setPayError("");
+
+    // Pay on delivery skips the payment gateway entirely.
+    if (payment === "cod") {
+      onPlaceOrder({ address, city, payment });
+      return;
+    }
+
+    if (!window.PaystackPop) {
+      setPayError("Payment system is still loading. Please try again in a moment.");
+      return;
+    }
+
+    setPaying(true);
+    const handler = window.PaystackPop.setup({
+      key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
+      email: userEmail || "guest@ultraclean.app",
+      amount: Math.round(total * 100), // Paystack expects kobo
+      currency: "NGN",
+      channels: payment === "transfer" ? ["bank_transfer"] : ["card"],
+      ref: "UC-" + Date.now(),
+      callback: function (response) {
+        setPaying(false);
+        onPlaceOrder({ address, city, payment, paystackRef: response.reference });
+      },
+      onClose: function () {
+        setPaying(false);
+      },
+    });
+    handler.openIframe();
+  };
 
   return (
     <div>
@@ -629,8 +664,9 @@ function ScreenCheckout({ total, onPlaceOrder, onBack }) {
       </div>
 
       <div style={{ padding: 16 }}>
-        <PrimaryButton style={{ width: "100%" }} disabled={!canPlace} onClick={() => onPlaceOrder({ address, city, payment })}>
-          Place Order · {money(total)}
+        {payError && <div style={{ color: BRAND.danger, fontSize: 12, marginBottom: 10, fontWeight: 600, textAlign: "center" }}>{payError}</div>}
+        <PrimaryButton style={{ width: "100%" }} disabled={!canPlace || paying} onClick={handlePlaceOrder}>
+          {paying ? "Waiting for payment…" : payment === "cod" ? `Place Order · ${money(total)}` : `Pay ${money(total)}`}
         </PrimaryButton>
         {!canPlace && <div style={{ fontSize: 11, color: BRAND.sub, textAlign: "center", marginTop: 6 }}>Enter a delivery address to continue</div>}
       </div>
@@ -1135,12 +1171,13 @@ export default function UltraCleanApp() {
 
   const goCheckout = (total) => { setPendingTotal(total); setScreen("checkout"); };
 
-  const placeOrder = ({ address, city, payment }) => {
+  const placeOrder = ({ address, city, payment, paystackRef }) => {
     const order = {
       id: String(1000 + orders.length + 1),
       items: cart,
       total: pendingTotal,
       address, city, payment,
+      paystackRef: paystackRef || null,
       status: STATUSES[0],
     };
     setOrders(prev => [...prev, order]);
@@ -1187,7 +1224,7 @@ export default function UltraCleanApp() {
           <ScreenCart cart={cart} updateQty={updateQty} removeItem={removeItem} onCheckout={goCheckout} setScreen={setScreen} />
         )}
         {screen === "checkout" && (
-          <ScreenCheckout total={pendingTotal} onPlaceOrder={placeOrder} onBack={() => setScreen("cart")} />
+          <ScreenCheckout total={pendingTotal} onPlaceOrder={placeOrder} onBack={() => setScreen("cart")} userEmail={session?.user?.email} />
         )}
         {screen === "confirm" && lastOrder && (
           <ScreenOrderConfirm order={lastOrder} setScreen={setScreen} />
