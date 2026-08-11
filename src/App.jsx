@@ -1242,7 +1242,6 @@ export default function UltraCleanApp() {
       setScreen("confirm");
     } catch (err) {
       console.error("Could not save order to your account, showing local confirmation instead:", err);
-      alert("DEBUG - order save failed: " + (err?.message || JSON.stringify(err)));
       const order = {
         id: String(1000 + orders.length + 1),
         items: cart, total: pendingTotal, address, city, payment,
