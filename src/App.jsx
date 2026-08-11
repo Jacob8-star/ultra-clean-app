@@ -925,6 +925,9 @@ function ScreenAdmin({ products, setProducts, orders, setOrders, setAdminMode })
       if (o.id !== id) return o;
       const idx = STATUSES.indexOf(o.status);
       const next = STATUSES[Math.min(STATUSES.length - 1, idx + 1)];
+      supabase.from("orders").update({ status: next }).eq("id", id).then(({ error }) => {
+        if (error) console.error("Could not update order status:", error);
+      });
       return { ...o, status: next };
     }));
   };
@@ -1160,7 +1163,6 @@ export default function UltraCleanApp() {
         const { data, error } = await supabase
           .from("orders")
           .select("id, items, total, address, city, payment, paystack_ref, status, created_at")
-          .eq("user_id", session.user.id)
           .order("created_at", { ascending: false });
         if (error) throw error;
         setOrders((data || []).map((o) => ({
