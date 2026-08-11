@@ -7,6 +7,9 @@ import {
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
+// Only this email can access the Admin Dashboard.
+const ADMIN_EMAIL = "jacobjuwon08@gmail.com";
+
 /* ---------------------------------------------------------
    ULTRA CLEAN — Home Care e-commerce app prototype
    Brand: deep green / white / gold-yellow
@@ -890,13 +893,15 @@ function ScreenAccount({ favorites, products, setScreen, onOpenProduct, toggleFa
             <ChevronRight size={15} color={BRAND.sub} />
           </div>
         ))}
-        <button onClick={() => setAdminMode(true)} style={{
-          display: "flex", justifyContent: "space-between", alignItems: "center", background: BRAND.greenSoft,
-          border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: "13px 14px", cursor: "pointer", marginTop: 6
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: BRAND.green }}>Admin Dashboard</span>
-          <ChevronRight size={15} color={BRAND.green} />
-        </button>
+        {session?.user?.email === ADMIN_EMAIL && (
+          <button onClick={() => setAdminMode(true)} style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center", background: BRAND.greenSoft,
+            border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: "13px 14px", cursor: "pointer", marginTop: 6
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: BRAND.green }}>Admin Dashboard</span>
+            <ChevronRight size={15} color={BRAND.green} />
+          </button>
+        )}
         <button onClick={handleSignOut} style={{
           display: "flex", justifyContent: "center", alignItems: "center", background: "#FCEAE8",
           border: "none", borderRadius: 12, padding: "13px 14px", cursor: "pointer", marginTop: 10
@@ -1267,7 +1272,7 @@ export default function UltraCleanApp() {
     { id: "account", label: "Account", icon: User },
   ];
 
-  if (adminMode) {
+  if (adminMode && session?.user?.email === ADMIN_EMAIL) {
     return (
       <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", maxWidth: 420, margin: "0 auto", background: "#F5F7F5", minHeight: 700 }}>
         <ScreenAdmin products={products} setProducts={setProducts} orders={orders} setOrders={setOrders} setAdminMode={setAdminMode} />
