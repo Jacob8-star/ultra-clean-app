@@ -1149,6 +1149,37 @@ export default function UltraCleanApp() {
   const [search, setSearch] = useState("");
   const [adminMode, setAdminMode] = useState(false);
 
+  // Load this customer's order history from Supabase whenever they sign in.
+  useEffect(() => {
+    async function loadOrders() {
+      if (!session) {
+        setOrders([]);
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from("orders")
+          .select("id, items, total, address, city, payment, paystack_ref, status, created_at")
+          .eq("user_id", session.user.id)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        setOrders((data || []).map((o) => ({
+          id: o.id,
+          items: o.items,
+          total: o.total,
+          address: o.address,
+          city: o.city,
+          payment: o.payment,
+          paystackRef: o.paystack_ref,
+          status: o.status,
+        })));
+      } catch (err) {
+        console.error("Could not load order history:", err);
+      }
+    }
+    loadOrders();
+  }, [session]);
+
   const setScreen = (s, id) => {
     if (id) setTrackId(id);
     setScreenRaw(s);
@@ -1169,22 +1200,60 @@ export default function UltraCleanApp() {
   const updateQty = (idx, d) => setCart(prev => prev.map((it, i) => i === idx ? { ...it, qty: Math.max(1, it.qty + d) } : it));
   const removeItem = (idx) => setCart(prev => prev.filter((_, i) => i !== idx));
 
-  const goCheckout = (total) => { setPendingTotal(total); setScreen("checkout"); };
+  const goCheckout = (total) => {
+    if (!session) {
+      setScreen("account");
+      return;
+    }
+    setPendingTotal(total);
+    setScreen("checkout");
+  };
 
-  const placeOrder = ({ address, city, payment, paystackRef }) => {
-    const order = {
-      id: String(1000 + orders.length + 1),
+  const placeOrder = async ({ address, city, payment, paystackRef }) => {
+    if (!session) {
+      setScreen("account");
+      return;
+    }
+    const row = {
+      user_id: session.user.id,
       items: cart,
       total: pendingTotal,
       address, city, payment,
-      paystackRef: paystackRef || null,
+      paystack_ref: paystackRef || null,
       status: STATUSES[0],
     };
-    setOrders(prev => [...prev, order]);
-    setCart([]);
-    setLastOrder(order);
-    setTrackId(order.id);
-    setScreen("confirm");
+    try {
+      const { data, error } = await supabase.from("orders").insert(row).select().single();
+      if (error) throw error;
+      const order = {
+        id: data.id,
+        items: data.items,
+        total: data.total,
+        address: data.address,
+        city: data.city,
+        payment: data.payment,
+        paystackRef: data.paystack_ref,
+        status: data.status,
+      };
+      setOrders(prev => [order, ...prev]);
+      setCart([]);
+      setLastOrder(order);
+      setTrackId(order.id);
+      setScreen("confirm");
+    } catch (err) {
+      console.error("Could not save order to your account, showing local confirmation instead:", err);
+      alert("DEBUG - order save failed: " + (err?.message || JSON.stringify(err)));
+      const order = {
+        id: String(1000 + orders.length + 1),
+        items: cart, total: pendingTotal, address, city, payment,
+        paystackRef: paystackRef || null, status: STATUSES[0],
+      };
+      setOrders(prev => [order, ...prev]);
+      setCart([]);
+      setLastOrder(order);
+      setTrackId(order.id);
+      setScreen("confirm");
+    }
   };
 
   const trackedOrder = orders.find(o => o.id === trackId) || lastOrder;
